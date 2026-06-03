@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI芯片封装设计剖面对比 · 沃肯资本</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  :root{--ink:#0f1420;--ink2:#1c2433;--paper:#f3efe6;--line:#c9c0ad;--gold:#b08d3c;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:'Noto Sans SC',sans-serif;line-height:1.55;
+    background-image:radial-gradient(circle at 12% 4%,rgba(176,141,60,.05),transparent 38%),radial-gradient(circle at 88% 96%,rgba(47,93,138,.05),transparent 38%);}
+  .wrap{max-width:1240px;margin:0 auto;padding:46px 30px 80px}
+  header{border-bottom:3px solid var(--ink);padding-bottom:22px;margin-bottom:10px}
+  .kicker{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);margin-bottom:12px}
+  h1{font-family:'Noto Serif SC',serif;font-weight:900;font-size:clamp(28px,5vw,46px);line-height:1.12}
+  .sub{font-family:'Noto Serif SC',serif;font-size:17px;color:var(--ink2);margin-top:12px;font-weight:400}
+  .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:#8a8270;margin-top:14px}
+
+  /* shared legend */
+  .legendbar{background:#fbfaf6;border:1px solid var(--line);border-radius:6px;padding:16px 20px;margin-top:22px;box-shadow:0 6px 18px rgba(15,20,32,.05)}
+  .legendbar .lt{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:12px}
+  .legendbar .items{display:flex;flex-wrap:wrap;gap:10px 22px}
+  .li{display:flex;align-items:center;gap:8px;font-size:12px}
+  .li .swx{width:26px;height:16px;border-radius:2px;flex-shrink:0;border:1px solid rgba(0,0,0,.18)}
+
+  .group-label{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:#fff;background:var(--ink);display:inline-block;padding:5px 14px;border-radius:4px;margin:54px 0 4px}
+  .group-desc{color:var(--ink2);font-size:14px;max-width:880px;margin-bottom:18px}
+
+  .diagram{background:#fbfaf6;border:1px solid var(--line);border-radius:7px;padding:8px 8px 4px;margin-bottom:24px;box-shadow:0 8px 24px rgba(15,20,32,.06)}
+  .diagram.hot{border:2px solid #b5403a;box-shadow:0 12px 32px rgba(181,64,58,.12)}
+  .dtitle{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 16px 6px;flex-wrap:wrap}
+  .dtitle .nm{font-family:'Noto Serif SC',serif;font-weight:700;font-size:19px}
+  .dtitle .nm small{font-family:'JetBrains Mono',monospace;font-size:10px;color:#8a8270;font-weight:400;margin-left:8px;letter-spacing:.08em}
+  .dtitle .pkg{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 9px;border-radius:12px;background:#ece6d6;color:#6a6354;font-weight:600;white-space:nowrap}
+  .dnote{padding:0 16px 12px;font-size:12.5px;color:var(--ink2)}
+  .dnote b{color:var(--ink)}
+  svg text{font-family:'Noto Sans SC',sans-serif}
+  .mono{font-family:'JetBrains Mono',monospace}
+
+  footer{margin-top:56px;border-top:2px solid var(--ink);padding-top:18px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8a8270;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  .endnote{margin-top:26px;font-size:12px;color:#6a6354;border-left:3px solid var(--gold);padding:10px 14px;background:#faf7ef}
+  .endnote b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Vulcan Capital · Advanced Packaging Teardown</div>
+    <h1>AI 芯片封装设计剖面对比</h1>
+    <div class="sub">以「存储—计算」的物理装配方式分类的精确剖面图（cross-section stack-up）</div>
+    <div class="meta">2.5D 并列 ｜ 3D 垂直堆叠 ｜ 单片集成 &nbsp;·&nbsp; 七款芯片同比例示意 · 2026.06</div>
+  </header>
+
+  <!-- SHARED LEGEND -->
+  <div class="legendbar">
+    <div class="lt">统一物理图例 · Physical Legend</div>
+    <div class="items">
+      <div class="li"><span class="swx" style="background:#caa46a"></span>有机封装基板 (Organic Substrate)</div>
+      <div class="li"><span class="swx" style="background:#9aa0a8"></span>硅中介层 (Si Interposer · CoWoS)</div>
+      <div class="li"><span class="swx" style="background:#2f3b52"></span>逻辑/计算 Die</div>
+      <div class="li"><span class="swx" style="background:#b5403a"></span>GPU / 主计算 Die</div>
+      <div class="li"><span class="swx" style="background:#3a6ea5"></span>DRAM Die (HBM)</div>
+      <div class="li"><span class="swx" style="background:#c77b3e"></span>DRAM Die (堆叠/Cube)</div>
+      <div class="li"><span class="swx" style="background:#5a8a4a"></span>SRAM 阵列 / 存算 macro</div>
+      <div class="li"><span class="swx" style="background:#9c4f9c"></span>ReRAM 交叉阵列</div>
+      <div class="li"><span class="swx" style="background:#1c2433;border-radius:50%"></span>TSV 硅通孔(竖线)</div>
+      <div class="li"><span class="swx" style="background:radial-gradient(circle,#444 40%,transparent 42%)"></span>Microbump 微凸点</div>
+      <div class="li"><span class="swx" style="background:#e0c9a0;border:1px solid #b08d3c"></span>C4 / BGA 焊球</div>
+      <div class="li"><span class="swx" style="background:repeating-linear-gradient(90deg,#b5403a 0 3px,transparent 3px 6px)"></span>Hybrid Bond 混合键合</div>
+    </div>
+  </div>
+
+  <!-- ============ GROUP A: 2.5D ============ -->
+  <div class="group-label">A · 2.5D 并列封装 — 存储与计算「肩并肩」放在硅中介层上</div>
+  <p class="group-desc">计算 Die 与 HBM 堆栈并排坐落在 <b>硅中介层 (Si Interposer)</b> 上，靠中介层里的高密度布线横向连接。这是英伟达与谷歌的主流方案：带宽极高，但中介层 + CoWoS 封装成本占整芯片约 1/3，且依赖台积电 CoWoS 产能与 HBM 供应。</p>
+
+  <div class="diagram" id="d_rubin"></div>
+  <div class="diagram" id="d_tpu"></div>
+
+  <!-- ============ GROUP B: 3D ============ -->
+  <div class="group-label">B · 近存计算 + 有机基板（绕开 CoWoS）— 存储单元内置计算，告别硅中介层</div>
+  <p class="group-desc">两者共同点：<b>存储单元的 base die 内置计算</b>（而非 HBM base die 只做 SerDes 数传），且<b>用有机基板替代硅中介层 / CoWoS</b>，大幅降低封装成本。差异在空间排布——<b>d-Matrix 把 DRAM 垂直堆叠在计算 chiplet 上方（3D）；艾捷科芯二代则把 6 颗含计算的 Memory Cube 平铺封装在 GPU 周围（类 2.5D 摆位）</b>。由于计算在存储侧完成，二者对外部带宽的需求都显著低于 HBM 方案。</p>
+
+  <div class="diagram" id="d_dmx"></div>
+  <div class="diagram hot" id="d_aijk"></div>
+
+  <!-- ============ GROUP C: monolithic ============ -->
+  <div class="group-label">C · 单片集成 — 计算与存储在「同一片硅」上，无外部内存、无堆叠</div>
+  <p class="group-desc">不使用外部 HBM、不做 die 堆叠，<b>存储与计算融合在同一颗单片 Die 内</b>。Groq 用片上 SRAM 做数据流；后摩把乘加做进 SRAM 单元；亿铸用 ReRAM 交叉阵列。封装最简单、成本最低，但片上容量受限，难承载超大模型。</p>
+
+  <div class="diagram" id="d_lpu"></div>
+  <div class="diagram" id="d_houmo"></div>
+  <div class="diagram" id="d_yizhu"></div>
+
+  <div class="endnote">
+    <b>剖面图说明：</b>所有剖面为<b>结构示意</b>，层数 / 凸点数量为表意性简化，非真实物理尺寸比例。Rubin / TPU 的 HBM 堆栈实际为 8–16 层（剖面仅示部分）；艾捷科芯二代「6 颗含计算 Memory Cube 平铺于 GPU 周围 + 多制程（base die 14nm / 上层 4/5nm）+ 有机基板替代 CoWoS」为访谈所述设计方案，<b>2027 H1 流片后方可验证</b>。d-Matrix 3DIMC 已在 Pavehawk 测试硅上验证。
+  </div>
+
+  <footer>
+    <span>© 沃肯资本 VULCAN CAPITAL · 机密研究材料</span>
+    <span>来源：各公司官方披露 / 行业封装分析 · 仅供内部投资决策参考</span>
+  </footer>
+</div>
+
+<script>
+const C={
+  sub:'#caa46a', subEdge:'#a8854a',
+  interp:'#9aa0a8', interpEdge:'#7c828a',
+  logic:'#2f3b52', gpu:'#b5403a', mpu:'#c0504a',
+  hbm:'#3a6ea5', hbmBase:'#244a72',
+  dram:'#c77b3e', dramBase:'#8a4f1f',
+  sram:'#5a8a4a', sramD:'#3f6635',
+  reram:'#9c4f9c',
+  ball:'#e0c9a0', ballEdge:'#b08d3c',
+  bump:'#3a3a3a', tsv:'#11151f',
+  txt:'#0f1420', txtL:'#5a5446', white:'#fff'
+};
+
+function el(tag,attrs,children){
+  const a=Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ');
+  return `<${tag} ${a}>${children||''}</${tag}>`;
+}
+function rect(x,y,w,h,fill,opt={}){
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${opt.r??2}" fill="${fill}" ${opt.stroke?`stroke="${opt.stroke}" stroke-width="${opt.sw??1}"`:''} ${opt.op?`fill-opacity="${opt.op}"`:''}/>`;
+}
+function label(x,y,t,fill,size,opt={}){
+  return `<text x="${x}" y="${y}" font-size="${size||11}" fill="${fill}" ${opt.b?'font-weight="700"':''} ${opt.anchor?`text-anchor="${opt.anchor}"`:''} ${opt.mono?'font-family="JetBrains Mono,monospace"':''} ${opt.rot?`transform="rotate(${opt.rot} ${x},${y})"`:''}>${t}</text>`;
+}
+// row of balls under a die: y is top of balls
+function balls(x,w,y,n,r,fill,edge){
+  const gap=w/n; let s='';
+  for(let i=0;i<n;i++){const cx=x+gap*(i+0.5);s+=`<circle cx="${cx}" cy="${y+r}" r="${r}" fill="${fill}" stroke="${edge}" stroke-width="1"/>`;}
+  return s;
+}
+// microbumps between two layers (small filled dots)
+function microbumps(x,w,y,n){
+  const gap=w/n;let s='';
+  for(let i=0;i<n;i++){const cx=x+gap*(i+0.5);s+=`<circle cx="${cx}" cy="${y}" r="2.4" fill="${C.bump}"/>`;}
+  return s;
+}
+// hybrid bond: dashed cu-cu line
+function hybridbond(x,w,y){
+  return `<line x1="${x}" y1="${y}" x2="${x+w}" y2="${y}" stroke="${C.gpu}" stroke-width="2" stroke-dasharray="3 3"/>`;
+}
+// TSV vertical lines through a stack region
+function tsv(x,w,yTop,yBot,n){
+  const gap=w/(n+1);let s='';
+  for(let i=1;i<=n;i++){const cx=x+gap*i;s+=`<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${C.tsv}" stroke-width="1.4" stroke-opacity=".55"/>`;}
+  return s;
+}
+// a multi-layer DRAM stack: base die + N dram dies, with TSV through them
+function dramStack(x,y,w,baseH,dieH,n,col,baseCol,baseLabel){
+  let s=''; let cy=y;
+  // dram dies top-down
+  for(let i=0;i<n;i++){
+    s+=rect(x,cy,w,dieH,col,{stroke:'rgba(255,255,255,.5)',sw:0.6});
+    if(i<n-1) s+=microbumps(x+4,w-8,cy+dieH,Math.floor(w/14));
+    cy+=dieH;
+  }
+  // base die
+  s+=rect(x,cy,w,baseH,baseCol);
+  if(baseLabel) s+=label(x+w/2,cy+baseH/2+3.5,baseLabel,C.white,9,{anchor:'middle',b:true,mono:true});
+  // TSV through entire stack
+  s+=tsv(x,w,y+2,cy-2,Math.floor(w/22));
+  return {svg:s, bottom:cy+baseH, topY:y};
+}
+
+const VW=1160, VH=300;
+function svgFrame(inner){return `<svg viewBox="0 0 ${VW} ${VH}" width="100%" role="img">${inner}</svg>`;}
+
+/* ---------- A1: NVIDIA RUBIN (2.5D CoWoS) ---------- */
+function rubin(){
+  let s='';
+  const subY=232, subH=26, subX=70, subW=1020;
+  // package substrate
+  s+=rect(subX,subY,subW,subH,C.sub,{stroke:C.subEdge}); s+=label(subX+8,subY+subH/2+4,'有机封装基板 (Package Substrate)',C.txt,11,{b:true});
+  // BGA balls under substrate
+  s+=balls(subX+10,subW-20,subY+subH,46,5,C.ball,C.ballEdge);
+  s+=label(subX, subY+subH+22,'BGA 焊球 → PCB',C.txtL,10,{mono:true});
+  // C4 bumps between interposer and substrate
+  // silicon interposer
+  const intY=200, intH=24, intX=130, intW=900;
+  s+=microbumps(intX+6,intW-12,subY,Math.floor(intW/16));
+  s+=rect(intX,intY,intW,intH,C.interp,{stroke:C.interpEdge}); s+=label(intX+intW/2,intY+intH/2+4,'硅中介层 Si Interposer（高密度 RDL 横向布线 · CoWoS）',C.white,11,{anchor:'middle',b:true});
+  s+=tsv(intX,intW,intY,intY+intH,40);
+  // microbumps between dies and interposer
+  s+=microbumps(intX+6,intW-12,intY,Math.floor(intW/14));
+  // HBM stacks (4 left visually + GPU center x2 + 4 right) -> show 3 HBM | 2 GPU | 3 HBM
+  const dieBot=intY; const dieH=14, baseH=16;
+  // left HBMs
+  let positions=[150,250,350]; 
+  positions.forEach(px=>{const st=dramStack(px,72,80,baseH,dieH,4,C.hbm,C.hbmBase,'HBM logic'); s+=st.svg;});
+  // GPU center (two reticle dies)
+  s+=rect(470,150,100,dieBot-150,C.gpu); s+=label(520,180,'GPU Die',C.white,12,{anchor:'middle',b:true}); s+=label(520,196,'(×2 reticle)',C.white,9,{anchor:'middle'});
+  s+=rect(580,150,100,dieBot-150,C.gpu); s+=label(630,180,'GPU Die',C.white,12,{anchor:'middle',b:true}); s+=label(630,196,'(×2 reticle)',C.white,9,{anchor:'middle'});
+  // right HBMs
+  [710,810,910].forEach(px=>{const st=dramStack(px,72,80,baseH,dieH,4,C.hbm,C.hbmBase,'HBM logic'); s+=st.svg;});
+  // HBM label
+  s+=label(250,60,'HBM4 堆栈（每栈 8–16 层 DRAM + base die，TSV 垂直互连 · 共 ×8 颗，剖面示意）',C.hbmBase,11,{anchor:'middle',b:true});
+  s+=label(910,60,'HBM4 ×8',C.hbmBase,11,{anchor:'middle',b:true});
+  // horizontal data path arrows in interposer
+  s+=`<defs><marker id="ar1" markerWidth="8" markerHeight="8" refX="4" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fff"/></marker></defs>`;
+  s+=`<line x1="450" y1="212" x2="360" y2="212" stroke="#fff" stroke-width="2" marker-end="url(#ar1)"/>`;
+  s+=`<line x1="700" y1="212" x2="790" y2="212" stroke="#fff" stroke-width="2" marker-end="url(#ar1)"/>`;
+  return svgFrame(s);
+}
+
+/* ---------- A2: GOOGLE TPU v7 (2.5D, systolic) ---------- */
+function tpu(){
+  let s='';
+  const subY=232, subH=26, subX=120, subW=920;
+  s+=rect(subX,subY,subW,subH,C.sub,{stroke:C.subEdge}); s+=label(subX+8,subY+subH/2+4,'有机封装基板',C.txt,11,{b:true});
+  s+=balls(subX+10,subW-20,subY+subH,42,5,C.ball,C.ballEdge);
+  const intY=200,intH=24,intX=170,intW=820;
+  s+=microbumps(intX+6,intW-12,subY,Math.floor(intW/16));
+  s+=rect(intX,intY,intW,intH,C.interp,{stroke:C.interpEdge}); s+=label(intX+intW/2,intY+intH/2+4,'硅中介层 Si Interposer',C.white,11,{anchor:'middle',b:true});
+  s+=tsv(intX,intW,intY,intY+intH,36);
+  s+=microbumps(intX+6,intW-12,intY,Math.floor(intW/14));
+  // 4 HBM left, TPU ASIC center, 4 HBM right -> show 2 | ASIC | 2
+  [200,300].forEach(px=>{const st=dramStack(px,80,90,16,14,4,C.hbm,C.hbmBase,'HBM logic'); s+=st.svg;});
+  [770,870].forEach(px=>{const st=dramStack(px,80,90,16,14,4,C.hbm,C.hbmBase,'HBM logic'); s+=st.svg;});
+  // TPU ASIC die with systolic MXU array
+  s+=rect(420,120,300,80,C.logic); s+=label(570,114,'TPU ASIC Die',C.white,12,{anchor:'middle',b:true});
+  // systolic array grid inside
+  s+=`<g stroke="#5f7196" stroke-width="1">`;
+  for(let i=0;i<=8;i++) s+=`<line x1="${430+i*32}" y1="128" x2="${430+i*32}" y2="192"/>`;
+  for(let j=0;j<=4;j++) s+=`<line x1="426" y1="${134+j*15}" x2="714" y2="${134+j*15}"/>`;
+  s+=`</g>`;
+  s+=label(570,168,'脉动阵列 MXU (systolic array)',C.white,10,{anchor:'middle'});
+  s+=label(300,60,'HBM3E ×8（192GB · 7.4 TB/s）',C.hbmBase,11,{anchor:'middle',b:true});
+  return svgFrame(s);
+}
+
+/* ---------- B1: d-Matrix 3DIMC (3D stacked, organic substrate) ---------- */
+function dmx(){
+  let s='';
+  const subY=240,subH=26,subX=260,subW=640;
+  s+=rect(subX,subY,subW,subH,C.sub,{stroke:C.subEdge}); s+=label(subX+subW/2,subY+subH/2+4,'有机封装基板（无硅中介层 / 非 CoWoS）',C.txt,11,{anchor:'middle',b:true});
+  s+=balls(subX+10,subW-20,subY+subH,30,5,C.ball,C.ballEdge);
+  // C4 bumps between compute chiplet and substrate
+  s+=balls(subX+40,subW-80,subY-9,18,4.5,C.ball,C.ballEdge);
+  s+=label(subX+subW+10,subY-2,'C4 凸点',C.txtL,10,{mono:true});
+  // compute chiplet (DIMC) base
+  const cx=300,cw=560, cY=196,cH=36;
+  s+=rect(cx,cY,cw,cH,C.logic); s+=label(cx+cw/2,cY+cH/2+4,'计算 Chiplet · DIMC 引擎（改造 SRAM 单元做乘加）',C.white,11,{anchor:'middle',b:true});
+  // hybrid bond / microbump between compute and DRAM stack
+  s+=microbumps(cx+30,cw-60,cY,Math.floor(cw/16));
+  // 3D stacked DRAM on top
+  const dx=330,dw=500,dramTop=96,dieH=15,nd=6;
+  let cy=dramTop;
+  for(let i=0;i<nd;i++){s+=rect(dx,cy,dw,dieH,C.dram,{stroke:'rgba(255,255,255,.5)',sw:0.6}); if(i<nd-1)s+=microbumps(dx+8,dw-16,cy+dieH,Math.floor(dw/16)); cy+=dieH;}
+  s+=tsv(dx,dw,dramTop+2,cy-2,Math.floor(dw/26));
+  s+=label(dx+dw/2,dramTop-10,'3D 堆叠 DRAM（主动 · 每 bank 直连计算引擎）',C.dramBase,11,{anchor:'middle',b:true});
+  // vertical data arrows (short) between dram and compute
+  s+=`<defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="4" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#c77b3e"/></marker></defs>`;
+  s+=`<line x1="430" y1="190" x2="430" y2="178" stroke="#c77b3e" stroke-width="2.5" marker-end="url(#ar2)"/>`;
+  s+=`<line x1="700" y1="190" x2="700" y2="178" stroke="#c77b3e" stroke-width="2.5" marker-end="url(#ar2)"/>`;
+  s+=label(880,150,'↕ 垂直短互连',C.dramBase,11,{anchor:'start',b:true});
+  s+=label(880,166,'20 TB/s/堆栈',C.txtL,10,{anchor:'start',mono:true});
+  s+=label(880,180,'0.3–0.4 pJ/bit',C.txtL,10,{anchor:'start',mono:true});
+  return svgFrame(s);
+}
+
+/* ---------- B2: 艾捷科芯 GEN2 (6 memory cubes AROUND GPU, organic substrate) ---------- */
+function aijk(){
+  let s='';
+  const subY=248,subH=26,subX=80,subW=950;
+  s+=rect(subX,subY,subW,subH,C.sub,{stroke:C.subEdge});
+  s+=label(subX+subW/2,subY+subH/2+4,'有机 PCB 基板（无 Si 中介层 / 无 CoWoS · 成本大幅降低）',C.txt,11,{anchor:'middle',b:true});
+  s+=balls(subX+10,subW-20,subY+subH,42,5,C.ball,C.ballEdge);
+
+  // GPU center die (FFN / Decode)
+  const gx=478,gw=160,gY=182,gH=58;
+  s+=balls(gx+8,gw-16,subY-9,14,4.4,C.ball,C.ballEdge);
+  s+=rect(gx,gY,gw,gH,C.gpu);
+  s+=label(gx+gw/2,gY+gH/2-3,'GPU 中心 Die',C.white,12,{anchor:'middle',b:true});
+  s+=label(gx+gw/2,gY+gH/2+13,'FFN / Decode · 4/5nm',C.white,9.5,{anchor:'middle'});
+
+  // 6 memory cubes: 3 left + 3 right, each = DRAM stack + compute base die
+  const cubeW=92;
+  const xs=[105,235,365,660,790,920];
+  let topY=999;
+  xs.forEach(x=>{
+    // C4 bumps under cube
+    s+=balls(x+6,cubeW-12,subY-9,8,4.2,C.ball,C.ballEdge);
+    // compute base die (with embedded compute) — 14nm
+    const baseY=214,baseH=24;
+    s+=rect(x,baseY,cubeW,baseH,C.mpu);
+    s+=label(x+cubeW/2,baseY+baseH/2+3.5,'计算 base die',C.white,8.4,{anchor:'middle',b:true,mono:true});
+    s+=`<g fill="#ffd9d6">`;
+    for(let i=0;i<5;i++) s+=`<circle cx="${x+13+i*17}" cy="${baseY+baseH-5}" r="2.6"/>`;
+    s+=`</g>`;
+    // DRAM stack on top of base die (the "cube")
+    const nd=4,dieH=13, dramTop=baseY-nd*dieH; let cy=dramTop;
+    for(let i=0;i<nd;i++){
+      s+=rect(x,cy,cubeW,dieH,C.dram,{stroke:'rgba(255,255,255,.5)',sw:0.6});
+      if(i<nd-1) s+=microbumps(x+6,cubeW-12,cy+dieH,Math.floor(cubeW/14));
+      cy+=dieH;
+    }
+    s+=microbumps(x+6,cubeW-12,baseY,Math.floor(cubeW/14));
+    s+=tsv(x,cubeW,dramTop+2,baseY-2,Math.floor(cubeW/22));
+    topY=Math.min(topY,dramTop);
+  });
+
+  // lateral low-bandwidth connections cube <-> GPU (through organic substrate)
+  s+=`<defs><marker id="arA" markerWidth="8" markerHeight="8" refX="4" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#b5403a"/></marker></defs>`;
+  s+=`<line x1="457" y1="228" x2="475" y2="228" stroke="#b5403a" stroke-width="2.5" marker-end="url(#arA)"/>`;
+  s+=`<line x1="652" y1="228" x2="635" y2="228" stroke="#b5403a" stroke-width="2.5" marker-end="url(#arA)"/>`;
+  s+=label(gx+gw/2,228+3,'↔ ~4 TB/s 横向',C.white,8.5,{anchor:'middle',mono:true});
+
+  // top labels
+  s+=label(VW/2,topY-26,'6 × Memory Cube 封装在 GPU 周围（非堆叠在上方）— 每颗 = DRAM 堆叠 + 计算 base die',C.dramBase,11.5,{anchor:'middle',b:true});
+  s+=label(VW/2,topY-11,'base die 内含近存计算 KV-Cache / Attention / Softmax（14nm）· 计算在 cube 内完成 → 外部带宽需求↓ · 芯片级 PD 分离',C.txtL,10.5,{anchor:'middle'});
+  return svgFrame(s);
+}
+
+/* ---------- C1: NVIDIA LPU / Groq (monolithic SRAM dataflow) ---------- */
+function lpu(){
+  let s='';
+  const subY=232,subH=26,subX=300,subW=560;
+  s+=rect(subX,subY,subW,subH,C.sub,{stroke:C.subEdge}); s+=label(subX+subW/2,subY+subH/2+4,'有机封装基板（标准 flip-chip）',C.txt,11,{anchor:'middle',b:true});
+  s+=balls(subX+10,subW-20,subY+subH,26,5,C.ball,C.ballEdge);
+  s+=balls(subX+40,subW-80,subY-9,18,4.5,C.ball,C.ballEdge);
+  // single monolithic die
+  const dx=330,dw=500,dY=88,dH=116;
+  s+=rect(dx,dY,dw,dH,'#eef4e9',{stroke:'#5a8a4a',sw:1.5});
+  s+=label(dx+dw/2,dY-10,'单片 Die（无外部 HBM · 无堆叠）',C.sramD,11,{anchor:'middle',b:true});
+  // tiles: SRAM + compute units interleaved
+  for(let i=0;i<6;i++){for(let j=0;j<3;j++){
+    const x=dx+18+i*78, y=dY+14+j*34;
+    s+=rect(x,y,40,12,C.gpu); // compute unit
+    s+=rect(x,y+13,40,14,C.sram); // sram
+  }}
+  s+=label(dx+dw/2,dY+dH-10,'计算单元(红) + 大容量片上 SRAM(绿) 交织 · 确定性数据流',C.sramD,10,{anchor:'middle',b:true});
+  return svgFrame(s);
+}
+
+/* ---------- C2: 后摩 SRAM-CIM (monolithic, compute-in-SRAM) ---------- */
+function houmo(){
+  let s='';
+  const subY=232,subH=26,subX=320,subW=520;
+  s+=rect(subX,subY,subW,subH,C.sub,{stroke:C.subEdge}); s+=label(subX+subW/2,subY+subH/2+4,'标准封装（车规 AEC-Q100）',C.txt,11,{anchor:'middle',b:true});
+  s+=balls(subX+10,subW-20,subY+subH,24,5,C.ball,C.ballEdge);
+  s+=balls(subX+40,subW-80,subY-9,16,4.5,C.ball,C.ballEdge);
+  const dx=350,dw=460,dY=84,dH=120;
+  s+=rect(dx,dY,dw,dH,'#eef4e9',{stroke:'#5a8a4a',sw:1.5});
+  s+=label(dx+dw/2,dY-10,'单片 Die · 天璇 IPU',C.sramD,11,{anchor:'middle',b:true});
+  // CIM macros: SRAM array with compute inside (red dots at cells)
+  for(let i=0;i<4;i++){
+    const mx=dx+20+i*112, my=dY+16, mw=96, mh=88;
+    s+=rect(mx,my,mw,mh,C.sram,{r:3});
+    s+=label(mx+mw/2,my-3,'CIM macro',C.sramD,8.5,{anchor:'middle',mono:true});
+    // cells with embedded compute
+    for(let a=0;a<6;a++)for(let b=0;b<5;b++){
+      s+=`<circle cx="${mx+12+a*14}" cy="${my+16+b*14}" r="3" fill="#ffe2df"/>`;
+    }
+  }
+  s+=label(dx+dw/2,dY+dH-9,'乘加运算嵌入 SRAM 单元内部（按比特串行）· 无数据搬运',C.sramD,10,{anchor:'middle',b:true});
+  return svgFrame(s);
+}
+
+/* ---------- C3: 亿铸 ReRAM-CIM (monolithic, memristor crossbar) ---------- */
+function yizhu(){
+  let s='';
+  const subY=232,subH=26,subX=320,subW=520;
+  s+=rect(subX,subY,subW,subH,C.sub,{stroke:C.subEdge}); s+=label(subX+subW/2,subY+subH/2+4,'标准封装',C.txt,11,{anchor:'middle',b:true});
+  s+=balls(subX+10,subW-20,subY+subH,24,5,C.ball,C.ballEdge);
+  s+=balls(subX+40,subW-80,subY-9,16,4.5,C.ball,C.ballEdge);
+  const dx=350,dw=460,dY=84,dH=120;
+  s+=rect(dx,dY,dw,dH,'#f3e9f3',{stroke:'#9c4f9c',sw:1.5});
+  s+=label(dx+dw/2,dY-10,'单片 Die · 全数字存内计算',C.reram,11,{anchor:'middle',b:true});
+  // ReRAM crossbar arrays
+  for(let k=0;k<3;k++){
+    const mx=dx+28+k*148, my=dY+18, gw=120, gh=84;
+    // wordlines / bitlines
+    s+=`<g stroke="#9c4f9c" stroke-width="1.6">`;
+    for(let i=0;i<7;i++) s+=`<line x1="${mx+i*18}" y1="${my}" x2="${mx+i*18}" y2="${my+gh}"/>`;
+    for(let j=0;j<5;j++) s+=`<line x1="${mx}" y1="${my+j*20}" x2="${mx+108}" y2="${my+j*20}"/>`;
+    s+=`</g>`;
+    // ReRAM cells at crosspoints
+    s+=`<g fill="#7a3a78">`;
+    for(let i=0;i<7;i++)for(let j=0;j<5;j++) s+=`<circle cx="${mx+i*18}" cy="${my+j*20}" r="3.2"/>`;
+    s+=`</g>`;
+    s+=label(mx+54,my-3,'ReRAM crossbar',C.reram,8.5,{anchor:'middle',mono:true});
+  }
+  s+=label(dx+dw/2,dY+dH-9,'权重即电阻（conductance）· 在交叉阵列中直接完成乘加',C.reram,10,{anchor:'middle',b:true});
+  return svgFrame(s);
+}
+
+// inject
+function build(id,title,sub,pkg,svg,note,hot){
+  document.getElementById(id).innerHTML=
+    `<div class="dtitle"><div class="nm">${title}<small>${sub}</small></div><span class="pkg">${pkg}</span></div>`+
+    svg+
+    `<div class="dnote">${note}</div>`;
+}
+build('d_rubin','英伟达 Rubin','NVIDIA · 2026','2.5D CoWoS',rubin(),
+  '<b>GPU Die（×2 reticle）居中，8 颗 HBM4 两侧并列</b>，全部坐在硅中介层上靠 RDL 横向连接。带宽极高（~13–16 TB/s），但中介层+CoWoS 成本高、依赖 TSMC CoWoS 与 SK海力士 HBM 产能。');
+build('d_tpu','谷歌 TPU v7','Google Ironwood · 2025','2.5D',tpu(),
+  '<b>TPU ASIC Die 居中（内含脉动阵列 MXU），8 颗 HBM3E 两侧并列</b>。结构与 Rubin 同属 2.5D，但计算 Die 是专用脉动阵列而非通用 GPU；192GB / 7.4 TB/s。');
+build('d_dmx','d-Matrix 3DIMC','d-Matrix Raptor · US','3D 堆叠 + 有机基板',dmx(),
+  '<b>计算 Chiplet（DIMC）在下，3D 堆叠 DRAM 在上</b>，垂直短互连，DRAM 每个 bank 直连计算引擎。<b>用有机基板而非硅中介层</b>，目标 20 TB/s/堆栈、0.3–0.4 pJ/bit（≈10×HBM4）。已在 Pavehawk 测试硅验证。');
+build('d_aijk','艾捷科芯 第二代','Aijiekexin · 2027 H1 流片','6×Cube 平铺 + 有机PCB',aijk(),
+  '<b>GPU 居中，6 颗 Memory Cube 平铺封装在其周围（非堆叠在上方，摆位类似英伟达 HBM 但只 6 颗、非 8 颗）。</b>每颗 Cube = DRAM 堆叠 + <b>计算 base die</b>——把大带宽算子（KV-Cache/Attention/Softmax）放在 Cube 的 base die 上就近完成（HBM base die 只做数传），GPU 中心专注 FFN/Decode，即<b>芯片级 PD 分离</b>。计算在 Cube 内完成使外部带宽需求降至约 4 TB/s（英伟达约 13 TB/s），从而<b>用有机 PCB 基板替代昂贵的 CoWoS 硅中介层</b>。与 d-Matrix 同属「近存+避CoWoS」阵营，但排布不同（d-Matrix 垂直堆叠），且艾捷科芯进度晚约一代。',true);
+build('d_lpu','英伟达 LPU','Groq → NVIDIA','单片 Monolithic',lpu(),
+  '<b>单片 Die，计算单元与大容量片上 SRAM 交织</b>，无外部 HBM、无 die 堆叠。编译器静态调度的确定性数据流，主打超低延迟；短板是片上容量小，需多芯片拼大模型。');
+build('d_houmo','后摩智能 SRAM-CIM','Houmo 天璇 IPU · CN','单片 (存内计算)',houmo(),
+  '<b>单片 Die，乘加运算直接嵌入 SRAM 存储单元内部</b>（红点=嵌入计算，按比特串行），从物理层面消灭数据搬运。鸿途H30 256TOPS/35W 已量产；SRAM 密度低，主攻边缘/车端。');
+build('d_yizhu','亿铸科技 ReRAM-CIM','Yizhu · CN','单片 (存内计算)',yizhu(),
+  '<b>单片 Die，ReRAM 交叉阵列存权重</b>（权重即电阻 conductance），利用电阻特性在交叉点直接完成乘加。能效潜力最高，但 ReRAM 工艺成熟度与量产良率是最大门槛，仍处早期。');
+</script>
+</body>
+</html>
